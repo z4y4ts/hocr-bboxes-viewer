@@ -3,67 +3,141 @@
 <head>
   <meta charset="utf-8"/>
   <style type="text/css">
-      canvas { border: 1px solid black; }
+      canvas {
+        border: 1px solid black; 
+        height: 100%;
+        width: 100%;
+      }
+
+      #drop-area.highlight {
+        background-color: limegreen;
+      }
   </style>
-  <script type="application/javascript">
-      function draw(page_sizes, bboxes_coords) {
-          let canvas = document.getElementById('canvas');
-          [canvas.width, canvas.height] = page_sizes;
-
-          if (canvas.getContext) {
-            var ctx = canvas.getContext('2d');
-
-            ctx.fillStyle = 'rgba(0, 0, 200, 0.1)';
-            for (let bbox of bboxes_coords) {
-                ctx.fillRect(bbox[0], bbox[1], bbox[2]-bbox[0], bbox[3]-bbox[1]);
-                // ctx.fillText('Hello world', 30, 30, 20);
-            }
-        }
-    }
-
-    let openFile = function(event) {
-        var input = event.target;
-        var text = "";
-        var reader = new FileReader();
-        reader.onload = (event) => {
-            text = reader.result;
-            let {page_sizes, bboxes_coords} = parseHOCR(text);
-            draw(page_sizes, bboxes_coords);
-        };
-        reader.readAsText(input.files[0]);
-
-    };
-
-    //this will parse XML file and output it to website
-    let parseHOCR = function(text) {
-        let responseDoc = new DOMParser().parseFromString(text, 'application/xml');
-        var bboxes_coords = [];
-
-        let page = responseDoc.querySelector('.ocr_page[title*="bbox"]');
-        var page_sizes = page.title
-          .split(/;\s*/)
-          .filter(_ => _.startsWith('bbox'))[0]
-          .replace('bbox ', '')
-          .split(' ')
-          .slice(2)
-          .map(_ => parseInt(_));
-
-        for (let bbox of responseDoc.querySelectorAll('*[title*="bbox"]')) {
-            let coords = bbox.title.replace('bbox ', '').split(' ');
-            bboxes_coords.push(coords.map(_ => parseInt(_)));
-        }
-        return {page_sizes, bboxes_coords};
-    };
-
-    function dragover_handler(ev) {
-     console.log("dragOver");
-     ev.preventDefault();
-    }
-    </script>
 </head>
-<body">
-  <input type='file' accept='.hocr' onchange='openFile(event)'>
-  <br/>
-  <canvas id="canvas" ondrop='openFile(event)'></canvas>
+<body>
+  <div id='drop-area' >
+    <div id='file-name'>
+      Drop .hocr file here...
+    </div>
+    <input type='file' accept='.hocr' onchange='openFile(event)'>
+    <br/>
+    <canvas id="canvas"></canvas>
+  </div>
 </body>
+<script type="application/javascript">
+  let dropArea = document.getElementById('drop-area');
+  let fileName = document.getElementById('file-name');
+  
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropArea.addEventListener(eventName, preventDefaults, false)
+  });
+
+  function preventDefaults (e) {
+    e.preventDefault()
+    e.stopPropagation()
+  };
+
+  ['dragenter', 'dragover'].forEach(eventName => {
+    dropArea.addEventListener(eventName, highlight, false)
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    dropArea.addEventListener(eventName, unhighlight, false)
+  });
+
+  function highlight(e) {
+    dropArea.classList.add('highlight')
+  };
+
+  function unhighlight(e) {
+    dropArea.classList.remove('highlight')
+  };
+
+  dropArea.addEventListener('drop', dropHandler, false)
+
+  function drawBboxesLayout(page_sizes, bboxes_coords) {
+        let canvas = document.getElementById('canvas');
+        [canvas.width, canvas.height] = page_sizes;
+
+        if (canvas.getContext) {
+          var ctx = canvas.getContext('2d');
+
+          ctx.fillStyle = 'rgba(0, 0, 200, 0.1)';
+          for (let bbox of bboxes_coords) {
+              ctx.fillRect(bbox[0], bbox[1], bbox[2]-bbox[0], bbox[3]-bbox[1]);
+              // ctx.fillText('Hello world', 30, 30, 20);
+          }
+      }
+  }
+
+  function openFile(event) {
+      var input = event.target;
+      var reader = new FileReader();
+      reader.onload = (event) => {
+          text = reader.result;
+          let {page_sizes, bboxes_coords} = parseHOCR(text);
+          drawBboxesLayout(page_sizes, bboxes_coords);
+      };
+      reader.readAsText(input.files[0]);
+
+  };
+
+  function processFile(file) {
+    let reader = new FileReader();
+    reader.onload = (event) => {
+        text = reader.result;
+        let {page_sizes, bboxes_coords} = parseHOCR(text);
+        drawBboxesLayout(page_sizes, bboxes_coords);
+    };
+    reader.readAsText(file);      
+  };
+
+  //this will parse XML file and output it to website
+  function parseHOCR(text) {
+      let responseDoc = new DOMParser().parseFromString(text, 'application/xml');
+      var bboxes_coords = [];
+
+      let page = responseDoc.querySelector('.ocr_page[title*="bbox"]');
+      var page_sizes = page.title
+        .split(/;\s*/)
+        .filter(_ => _.startsWith('bbox'))[0]
+        .replace('bbox ', '')
+        .split(' ')
+        .slice(2)
+        .map(_ => parseInt(_));
+
+      for (let bbox of responseDoc.querySelectorAll('*[title*="bbox"]')) {
+          let coords = bbox.title.replace('bbox ', '').split(' ');
+          bboxes_coords.push(coords.map(_ => parseInt(_)));
+      }
+      return {page_sizes, bboxes_coords};
+  };
+
+  function dropHandler(ev) {
+    console.log('File(s) dropped');
+
+    // Prevent default behavior (Prevent file from being opened)
+    ev.preventDefault();
+
+    if (ev.dataTransfer.items) {
+      // Use DataTransferItemList interface to access the file(s)
+      for (let item of ev.dataTransfer.items) {
+        // If dropped items aren't files, reject them
+        if (item.kind === 'file') {
+          let file = item.getAsFile();
+          console.log('... file.name = ' + file.name);
+          fileName.innerHTML = file.name;
+          processFile(file);
+        }
+      }
+    } else {
+      // Use DataTransfer interface to access the file(s)
+      for (let file of ev.dataTransfer.files) {
+        console.log('... file.name = ' + file.name);
+        fileName.innerHTML = file.name;
+        processFile(file);
+      }
+    }
+  }
+  </script>
 </html>
