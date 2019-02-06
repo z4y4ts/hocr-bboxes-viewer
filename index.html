@@ -55,17 +55,32 @@
 
   dropArea.addEventListener('drop', dropHandler, false)
 
-  function drawBboxesLayout(page_sizes, bboxes_coords) {
+  class Bbox {
+    constructor(left, top, right, bottom) {
+      this.left = left;
+      this.top = top;
+      this.right = right;
+      this.bottom = bottom;
+
+      this.width = this.right - this.left;
+      this.height = this.bottom - this.top;
+    }
+  }
+
+  function drawBboxesLayoutCanvas(page_sizes, bboxes_coords) {
         let canvas = document.getElementById('canvas');
         [canvas.width, canvas.height] = page_sizes;
 
         if (canvas.getContext) {
           var ctx = canvas.getContext('2d');
 
-          ctx.fillStyle = 'rgba(0, 0, 200, 0.1)';
           for (let bbox of bboxes_coords) {
-              ctx.fillRect(bbox[0], bbox[1], bbox[2]-bbox[0], bbox[3]-bbox[1]);
-              // ctx.fillText('Hello world', 30, 30, 20);
+            ctx.fillStyle = 'rgba(0, 0, 200, 0.1)';
+            ctx.fillRect(
+              bbox.coords.left, bbox.coords.top,
+              bbox.coords.width, bbox.coords.height);
+            ctx.fillStyle = 'rgba(0, 0, 0)';
+            ctx.fillText(bbox.text, bbox.coords.left, bbox.coords.bottom, bbox.coords.width);
           }
       }
   }
@@ -76,7 +91,7 @@
       reader.onload = (event) => {
           text = reader.result;
           let {page_sizes, bboxes_coords} = parseHOCR(text);
-          drawBboxesLayout(page_sizes, bboxes_coords);
+          drawBboxesLayoutCanvas(page_sizes, bboxes_coords);
       };
       reader.readAsText(input.files[0]);
 
@@ -87,7 +102,7 @@
     reader.onload = (event) => {
         text = reader.result;
         let {page_sizes, bboxes_coords} = parseHOCR(text);
-        drawBboxesLayout(page_sizes, bboxes_coords);
+        drawBboxesLayoutCanvas(page_sizes, bboxes_coords);
     };
     reader.readAsText(file);      
   };
@@ -108,7 +123,11 @@
 
       for (let bbox of responseDoc.querySelectorAll('*[title*="bbox"]')) {
           let coords = bbox.title.replace('bbox ', '').split(' ');
-          bboxes_coords.push(coords.map(_ => parseInt(_)));
+          bboxes_coords.push({
+            coords: new Bbox(...coords.map(_ => parseInt(_))),
+            text: [].reduce.call(
+              bbox.childNodes, (a, b) => a + (b.nodeType === 3 ? b.textContent : ''), '') || ''
+          });
       }
       return {page_sizes, bboxes_coords};
   };
