@@ -3,14 +3,17 @@
 <head>
   <meta charset="utf-8"/>
   <style type="text/css">
-      canvas {
-        border: 1px solid black; 
+      #drop-area.highlight {
+        background-color: limegreen;
+      }
+      #container {
         height: 100%;
         width: 100%;
       }
 
-      #drop-area.highlight {
-        background-color: limegreen;
+      svg text {
+        transform: scaleY(-1);
+        font-size: 11px;
       }
   </style>
 </head>
@@ -21,7 +24,7 @@
     </div>
     <input type='file' accept='.hocr' onchange='openFile(event)'>
     <br/>
-    <canvas id="canvas"></canvas>
+    <div id="container"><svg></svg></div>
   </div>
 </body>
 <script type="application/javascript">
@@ -67,22 +70,52 @@
     }
   }
 
-  function drawBboxesLayoutCanvas(page_sizes, bboxes_coords) {
-        let canvas = document.getElementById('canvas');
-        [canvas.width, canvas.height] = page_sizes;
 
-        if (canvas.getContext) {
-          var ctx = canvas.getContext('2d');
+  function drawBboxesLayout(page_sizes, bboxes_coords) {
+    const svgns = 'http://www.w3.org/2000/svg';
+    let container = document.getElementById('container');
+    // Clean svn container from previous renderings
+    container.childNodes.forEach(el => { el.remove() });
+    let page = document.createElementNS(svgns, 'svg');
+    [width, height] = page_sizes;
+    page.setAttribute('width', width);
+    page.setAttribute('height', height);
+    page.setAttribute('xmlns', svgns);
 
-          for (let bbox of bboxes_coords) {
-            ctx.fillStyle = 'rgba(0, 0, 200, 0.1)';
-            ctx.fillRect(
-              bbox.coords.left, bbox.coords.top,
-              bbox.coords.width, bbox.coords.height);
-            ctx.fillStyle = 'rgba(0, 0, 0)';
-            ctx.fillText(bbox.text, bbox.coords.left, bbox.coords.bottom, bbox.coords.width);
-          }
+    let cartesian = document.createElementNS(svgns, 'g');
+    cartesian.setAttribute('transform', `translate(0, ${height}) scale(1,-1)`)
+
+    const bboxColor = 'rgba(0, 0, 200, 0.1)';
+    const textColor = 'rgba(0, 0, 0)';
+
+    for (let bbox of bboxes_coords) {
+      if (! (Boolean(bbox.coords.top) || Boolean(bbox.coords.left) ||
+          Boolean(bbox.coords.right) ||Boolean(bbox.coords.bottom))) {
+        continue;
       }
+      // container to group text with bbox rect
+      let g = document.createElementNS(svgns, 'g');
+      let text = document.createElementNS(svgns, 'text');
+      text.textContent = bbox.text || '.';
+      text.setAttribute('x', bbox.coords.left);
+      text.setAttribute('y', -bbox.coords.top);
+      text.setAttribute('textLength', bbox.coords.width);
+      text.setAttribute('fill', textColor);
+
+      let rect = document.createElementNS(svgns, 'rect');
+      rect.setAttribute('x', bbox.coords.left);
+      rect.setAttribute('y', bbox.coords.top);
+      rect.setAttribute('width', bbox.coords.width);
+      rect.setAttribute('height', bbox.coords.height);
+      rect.setAttribute('fill', bboxColor);
+
+      g.appendChild(text);
+      g.appendChild(rect);
+      cartesian.appendChild(g);
+    }
+    page.appendChild(cartesian);
+    container.appendChild(page);
+
   }
 
   function openFile(event) {
@@ -91,7 +124,7 @@
       reader.onload = (event) => {
           text = reader.result;
           let {page_sizes, bboxes_coords} = parseHOCR(text);
-          drawBboxesLayoutCanvas(page_sizes, bboxes_coords);
+          drawBboxesLayout(page_sizes, bboxes_coords);
       };
       reader.readAsText(input.files[0]);
 
@@ -102,7 +135,7 @@
     reader.onload = (event) => {
         text = reader.result;
         let {page_sizes, bboxes_coords} = parseHOCR(text);
-        drawBboxesLayoutCanvas(page_sizes, bboxes_coords);
+        drawBboxesLayout(page_sizes, bboxes_coords);
     };
     reader.readAsText(file);      
   };
